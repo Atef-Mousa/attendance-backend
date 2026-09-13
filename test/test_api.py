@@ -5,9 +5,16 @@ from sqlalchemy import select
 from main import app
 import models
 from database import AsyncSessionLocal
+import pytest_asyncio
 
 BASE_URL = "http://testserver"
 
+from database import engine
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_engine():
+    yield
+    await engine.dispose()
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
