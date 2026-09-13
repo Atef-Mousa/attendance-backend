@@ -7,7 +7,7 @@ import models, schemas, auth
 from database import engine, get_db
 from services import AttendanceService
 from fastapi.middleware.cors import CORSMiddleware
-
+from datetime import datetime, timezone
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Non-blocking async table initialization on startup
@@ -15,7 +15,10 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(models.Base.metadata.create_all)
     yield
 
+
 app = FastAPI(title="OTP Student Attendance API (Async)", version="1.0.0", lifespan=lifespan)
+
+
 
 # Add CORS Middleware to allow requests from Flutter Web
 app.add_middleware(
@@ -44,14 +47,41 @@ async def register(user_in: schemas.UserCreate, db: AsyncSession = Depends(get_d
     await db.refresh(user)
     return user
 
+# @app.post("/api/v1/login", response_model=schemas.Token)
+# async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+#     result = await db.execute(select(models.User).where(models.User.email == form_data.username))
+#     user = result.scalar_one_or_none()
+    
+#     if not user or not auth.verify_password(form_data.password, user.hashed_password):
+#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    
+#     access_token = auth.create_access_token(data={"sub": str(user.id), "role": user.role.value})
+#     return {"access_token": access_token, "token_type": "bearer"}
+
+
 @app.post("/api/v1/login", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.User).where(models.User.email == form_data.username))
     user = result.scalar_one_or_none()
-    
+
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    
+
+    # Block student logins while any lecture session is active
+    if user.role == models.Role.STUDENT:
+        now = datetime.now(timezone.utc)
+        active_session_result = await db.execute(
+            select(models.LectureSession).where(
+                models.LectureSession.is_active == True,
+                models.LectureSession.expires_at > now,
+            )
+        )
+        if active_session_result.scalars().first() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Login is currently locked while a session is active."
+            )
+
     access_token = auth.create_access_token(data={"sub": str(user.id), "role": user.role.value})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -124,6 +154,44 @@ async def submit_attendance(
         "timestamp": record.timestamp,
         "message": "Attendance successfully recorded"
     }
+
+
+@app.get("/api/v1/settings/lock_status", response_model=schemas.LockStatusResponse)
+async def get_lock_status(db: AsyncSession = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(models.LectureSession).where(
+            models.LectureSession.is_active == True,
+            models.LectureSession.expires_at > now,
+        )
+    )
+    active_session = result.scalars().first()
+    return {"login_locked": active_session is not None}
+
+
+@app.post("/api/v1/sessions/{session_id}/stop", response_model=schemas.SessionResponse)
+async def stop_session(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    result = await db.execute(
+        select(models.LectureSession)
+        .join(models.Course, models.Course.id == models.LectureSession.course_id)
+        .where(
+            models.LectureSession.id == session_id,
+            models.Course.instructor_id == instructor.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.is_active = False
+    await db.commit()
+    await db.refresh(session)
+    return session
+
 
 if __name__ == "__main__":
     import uvicorn

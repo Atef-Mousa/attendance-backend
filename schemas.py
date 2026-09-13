@@ -60,3 +60,10 @@ class AttendanceResponse(BaseModel):
     message: str = "Attendance registered successfully"
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LockStatusResponse(BaseModel):
+    login_locked: bool
+
+    model_config = ConfigDict(from_attributes=True)
+

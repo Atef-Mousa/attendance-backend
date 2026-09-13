@@ -51,6 +51,7 @@ class AttendanceRecord(Base):
         DateTime(timezone=True), 
         default=lambda: datetime.now(timezone.utc), 
         nullable=False
+
     )
 
     student: Mapped["User"] = relationship(back_populates="attendance_records")
@@ -58,4 +59,4 @@ class AttendanceRecord(Base):
     __table_args__ = (
         UniqueConstraint("session_id", "student_id", name="uq_student_session_attendance"),
     )
-    
+
