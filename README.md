@@ -12,9 +12,6 @@ submit that OTP to mark themselves present.
 - **Auth:** JWT (PyJWT), password hashing with bcrypt
 - **Deployment:** [Render](https://render.com)
 
-## Live Deployment
-- API base URL: `https://attendance-backend-6zpt.onrender.com`
-- Interactive API docs (Swagger UI): `https://attendance-backend-6zpt.onrender.com/docs`
 
 Note: the free Render tier spins down after inactivity — the first
 request after idle time can take 30-50 seconds to respond.
