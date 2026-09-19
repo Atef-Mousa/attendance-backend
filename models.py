@@ -34,12 +34,14 @@ class LectureSession(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
     otp_code: Mapped[str] = mapped_column(String(6), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        default=lambda: datetime.now(timezone.utc), 
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    latitude: Mapped[float] = mapped_column(nullable=False)
+    longitude: Mapped[float] = mapped_column(nullable=False)
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
@@ -59,4 +61,5 @@ class AttendanceRecord(Base):
     __table_args__ = (
         UniqueConstraint("session_id", "student_id", name="uq_student_session_attendance"),
     )
+
 

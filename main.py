@@ -126,16 +126,17 @@ async def create_course(
 
 @app.post("/api/v1/sessions/start", response_model=schemas.SessionResponse)
 async def start_session(
-    session_in: schemas.SessionCreate, 
+    session_in: schemas.SessionCreate,
     db: AsyncSession = Depends(get_db),
     instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR))
 ):
     return await AttendanceService.create_lecture_session(
-        db=db, 
-        course_id=session_in.course_id, 
-        ttl_seconds=session_in.ttl_seconds
+        db=db,
+        course_id=session_in.course_id,
+        ttl_seconds=session_in.ttl_seconds,
+        latitude=session_in.latitude,
+        longitude=session_in.longitude,
     )
-
 @app.post("/api/v1/attendance/submit", response_model=schemas.AttendanceResponse)
 async def submit_attendance(
     payload: schemas.AttendanceSubmit,

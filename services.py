@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from config import MAX_ATTENDANCE_DISTANCE_METERS
 import models
 
 def generate_numeric_otp(length: int = 6) -> str:
@@ -12,12 +13,17 @@ def generate_numeric_otp(length: int = 6) -> str:
 class AttendanceService:
 
     @staticmethod
-    async def create_lecture_session(db: AsyncSession, course_id: int, ttl_seconds: int) -> models.LectureSession:
+    async def create_lecture_session(
+        db: AsyncSession,
+        course_id: int,
+        ttl_seconds: int,
+        latitude: float,
+        longitude: float,
+    ) -> models.LectureSession:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl_seconds)
         otp = generate_numeric_otp(6)
 
-        # Deactivate any lingering active sessions for this course using async update()
         await db.execute(
             update(models.LectureSession)
             .where(
@@ -32,7 +38,9 @@ class AttendanceService:
             otp_code=otp,
             created_at=now,
             expires_at=expires_at,
-            is_active=True
+            is_active=True,
+            latitude=latitude,
+            longitude=longitude,
         )
         db.add(session)
         await db.commit()

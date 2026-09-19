@@ -38,6 +38,8 @@ class CourseResponse(BaseModel):
 class SessionCreate(BaseModel):
     course_id: int
     ttl_seconds: int = Field(default=60, ge=30, le=300)
+    latitude: float
+    longitude: float
 
 class SessionResponse(BaseModel):
     id: int
@@ -45,12 +47,15 @@ class SessionResponse(BaseModel):
     otp_code: str
     expires_at: datetime
     is_active: bool
+    latitude: float
+    longitude: float
 
     model_config = ConfigDict(from_attributes=True)
 
-# Attendance Submission Schemas
 class AttendanceSubmit(BaseModel):
     otp_code: str = Field(min_length=6, max_length=6)
+    latitude: float
+    longitude: float
 
 class AttendanceResponse(BaseModel):
     id: int
