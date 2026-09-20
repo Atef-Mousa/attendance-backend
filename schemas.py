@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, HttpUrl
 from models import Role
 
 # User Schemas
@@ -49,6 +49,7 @@ class SessionResponse(BaseModel):
     is_active: bool
     latitude: float
     longitude: float
+    task_submissions_open: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +70,29 @@ class AttendanceResponse(BaseModel):
 
 class LockStatusResponse(BaseModel):
     login_locked: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AttendanceRecordResponse(BaseModel):
+    id: int
+    session_id: int
+    student_id: int
+    student_name: str
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+# Task Submission Schemas
+class TaskSubmissionCreate(BaseModel):
+    submission_link: HttpUrl
+
+class TaskSubmissionResponse(BaseModel):
+    id: int
+    session_id: int
+    student_id: int
+    student_name: str
+    submission_link: str
+    submitted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

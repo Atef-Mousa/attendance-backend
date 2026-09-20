@@ -157,6 +157,40 @@ async def submit_attendance(
     }
 
 
+@app.get("/api/v1/sessions/{session_id}/attendance", response_model=list[schemas.AttendanceRecordResponse])
+async def get_session_attendance(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    session_result = await db.execute(
+        select(models.LectureSession)
+        .join(models.Course, models.Course.id == models.LectureSession.course_id)
+        .where(
+            models.LectureSession.id == session_id,
+            models.Course.instructor_id == instructor.id,
+        )
+    )
+    if session_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(
+        select(models.AttendanceRecord, models.User)
+        .join(models.User, models.User.id == models.AttendanceRecord.student_id)
+        .where(models.AttendanceRecord.session_id == session_id)
+    )
+    return [
+        {
+            "id": record.id,
+            "session_id": record.session_id,
+            "student_id": record.student_id,
+            "student_name": student.full_name,
+            "timestamp": record.timestamp,
+        }
+        for record, student in result.all()
+    ]
+
+
 @app.get("/api/v1/settings/lock_status", response_model=schemas.LockStatusResponse)
 async def get_lock_status(db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
@@ -192,6 +226,94 @@ async def stop_session(
     await db.commit()
     await db.refresh(session)
     return session
+
+
+@app.post("/api/v1/sessions/{session_id}/close_task_submissions", response_model=schemas.SessionResponse)
+async def close_task_submissions(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    result = await db.execute(
+        select(models.LectureSession)
+        .join(models.Course, models.Course.id == models.LectureSession.course_id)
+        .where(
+            models.LectureSession.id == session_id,
+            models.Course.instructor_id == instructor.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.task_submissions_open = False
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+# --- TASK SUBMISSION ENDPOINTS ---
+
+@app.post(
+    "/api/v1/sessions/{session_id}/submit_task",
+    response_model=schemas.TaskSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_task(
+    session_id: int,
+    payload: schemas.TaskSubmissionCreate,
+    db: AsyncSession = Depends(get_db),
+    student: models.User = Depends(auth.require_role(models.Role.STUDENT))
+):
+    submission = await AttendanceService.submit_task(
+        db=db,
+        student_id=student.id,
+        session_id=session_id,
+        submission_link=str(payload.submission_link),
+    )
+    return {
+        "id": submission.id,
+        "session_id": submission.session_id,
+        "student_id": submission.student_id,
+        "student_name": student.full_name,
+        "submission_link": submission.submission_link,
+        "submitted_at": submission.submitted_at,
+    }
+
+
+@app.get("/api/v1/sessions/{session_id}/task_submissions", response_model=list[schemas.TaskSubmissionResponse])
+async def get_task_submissions(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    session_result = await db.execute(
+        select(models.LectureSession)
+        .join(models.Course, models.Course.id == models.LectureSession.course_id)
+        .where(
+            models.LectureSession.id == session_id,
+            models.Course.instructor_id == instructor.id,
+        )
+    )
+    if session_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    result = await db.execute(
+        select(models.TaskSubmission, models.User)
+        .join(models.User, models.User.id == models.TaskSubmission.student_id)
+        .where(models.TaskSubmission.session_id == session_id)
+    )
+    return [
+        {
+            "id": submission.id,
+            "session_id": submission.session_id,
+            "student_id": submission.student_id,
+            "student_name": student.full_name,
+            "submission_link": submission.submission_link,
+            "submitted_at": submission.submitted_at,
+        }
+        for submission, student in result.all()
+    ]
 
 
 if __name__ == "__main__":

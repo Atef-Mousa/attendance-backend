@@ -92,3 +92,59 @@ class AttendanceService:
         await db.commit()
         await db.refresh(record)
         return record
+
+    @staticmethod
+    async def submit_task(
+        db: AsyncSession, student_id: int, session_id: int, submission_link: str
+    ) -> models.TaskSubmission:
+        # 1. The session ID must refer to a real session
+        session_result = await db.execute(
+            select(models.LectureSession).where(models.LectureSession.id == session_id)
+        )
+        session = session_result.scalar_one_or_none()
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid session ID")
+
+        # 2. Task submissions must still be open for this session
+        if not session.task_submissions_open:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Task submissions are closed for this session"
+            )
+
+        # 3. The student must have attended this session
+        attendance_result = await db.execute(
+            select(models.AttendanceRecord).where(
+                models.AttendanceRecord.session_id == session_id,
+                models.AttendanceRecord.student_id == student_id
+            )
+        )
+        if attendance_result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You must attend this session before submitting a task"
+            )
+
+        # 4. Check for Duplicate Submission
+        dup_result = await db.execute(
+            select(models.TaskSubmission).where(
+                models.TaskSubmission.session_id == session_id,
+                models.TaskSubmission.student_id == student_id
+            )
+        )
+        if dup_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Task already submitted for this session"
+            )
+
+        # 5. Record Submission
+        submission = models.TaskSubmission(
+            session_id=session_id,
+            student_id=student_id,
+            submission_link=submission_link,
+        )
+        db.add(submission)
+        await db.commit()
+        await db.refresh(submission)
+        return submission

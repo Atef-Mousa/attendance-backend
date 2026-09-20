@@ -18,6 +18,7 @@ class User(Base):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.STUDENT, nullable=False)
 
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(back_populates="student")
+    task_submissions: Mapped[list["TaskSubmission"]] = relationship(back_populates="student")
 
 class Course(Base):
     __tablename__ = "courses"
@@ -42,6 +43,7 @@ class LectureSession(Base):
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     latitude: Mapped[float] = mapped_column(nullable=False)
     longitude: Mapped[float] = mapped_column(nullable=False)
+    task_submissions_open: Mapped[bool] = mapped_column(default=True, nullable=False)
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
@@ -50,8 +52,8 @@ class AttendanceRecord(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("lecture_sessions.id"), nullable=False)
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        default=lambda: datetime.now(timezone.utc), 
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False
 
     )
@@ -60,6 +62,25 @@ class AttendanceRecord(Base):
 
     __table_args__ = (
         UniqueConstraint("session_id", "student_id", name="uq_student_session_attendance"),
+    )
+
+class TaskSubmission(Base):
+    __tablename__ = "task_submissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("lecture_sessions.id"), nullable=False)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    submission_link: Mapped[str] = mapped_column(String(2048), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    student: Mapped["User"] = relationship(back_populates="task_submissions")
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "student_id", name="uq_student_session_task_submission"),
     )
 
 
