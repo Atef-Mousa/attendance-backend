@@ -6,7 +6,7 @@ from models import Role
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
-    full_name: str
+    full_name: str = Field(min_length=3, max_length=255)
     role: Role = Role.STUDENT
 
 class UserResponse(BaseModel):

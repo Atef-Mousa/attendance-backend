@@ -14,7 +14,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.STUDENT, nullable=False)
 
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(back_populates="student")

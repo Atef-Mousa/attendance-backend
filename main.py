@@ -35,7 +35,11 @@ async def register(user_in: schemas.UserCreate, db: AsyncSession = Depends(get_d
     result = await db.execute(select(models.User).where(models.User.email == user_in.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
+    name_result = await db.execute(select(models.User).where(models.User.full_name == user_in.full_name))
+    if name_result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Full name already taken, please use a unique name")
+
     user = models.User(
         email=user_in.email,
         hashed_password=auth.get_password_hash(user_in.password),
@@ -61,7 +65,7 @@ async def register(user_in: schemas.UserCreate, db: AsyncSession = Depends(get_d
 
 @app.post("/api/v1/login", response_model=schemas.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.User).where(models.User.email == form_data.username))
+    result = await db.execute(select(models.User).where(models.User.full_name == form_data.username))
     user = result.scalar_one_or_none()
 
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
