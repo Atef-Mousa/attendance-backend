@@ -30,7 +30,7 @@ class AttendanceService:
                 models.LectureSession.course_id == course_id,
                 models.LectureSession.is_active == True
             )
-            .values(is_active=False)
+            .values(is_active=False, task_submissions_open=False)
         )
 
         session = models.LectureSession(
@@ -109,7 +109,7 @@ class AttendanceService:
         if not session.task_submissions_open:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Task submissions are closed for this session"
+                detail="This session has expired, task submissions are no longer accepted"
             )
 
         # 3. Check for Duplicate Submission
