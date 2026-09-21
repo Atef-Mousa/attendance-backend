@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import ForeignKey, String, DateTime, Enum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
@@ -76,6 +77,7 @@ class TaskSubmission(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
+    grade: Mapped[Optional[float]] = mapped_column(nullable=True)
 
     student: Mapped["User"] = relationship(back_populates="task_submissions")
 

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -318,6 +318,69 @@ async def get_task_submissions(
         }
         for submission, student in result.all()
     ]
+
+
+# --- STUDENT PERFORMANCE ENDPOINTS ---
+
+@app.get("/api/v1/students/search", response_model=list[schemas.StudentSearchResult])
+async def search_students(
+    q: str = Query(min_length=1),
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    return await AttendanceService.search_students(db=db, query=q)
+
+
+@app.get("/api/v1/students/{student_id}/performance", response_model=schemas.StudentPerformanceResponse)
+async def get_student_performance(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    student, courses_performance, submissions = await AttendanceService.get_student_performance(
+        db=db, student_id=student_id, instructor_id=instructor.id
+    )
+    return {
+        "student_id": student.id,
+        "full_name": student.full_name,
+        "email": student.email,
+        "courses": courses_performance,
+        "task_submissions": [
+            {
+                "id": submission.id,
+                "session_id": submission.session_id,
+                "student_id": submission.student_id,
+                "student_name": student.full_name,
+                "submission_link": submission.submission_link,
+                "submitted_at": submission.submitted_at,
+                "grade": submission.grade,
+            }
+            for submission in submissions
+        ],
+    }
+
+
+@app.patch("/api/v1/task_submissions/{submission_id}/grade", response_model=schemas.TaskSubmissionResponse)
+async def set_task_grade(
+    submission_id: int,
+    payload: schemas.GradeUpdate,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    submission = await AttendanceService.set_task_grade(
+        db=db, submission_id=submission_id, instructor_id=instructor.id, grade=payload.grade
+    )
+    student_result = await db.execute(select(models.User).where(models.User.id == submission.student_id))
+    student = student_result.scalar_one()
+    return {
+        "id": submission.id,
+        "session_id": submission.session_id,
+        "student_id": submission.student_id,
+        "student_name": student.full_name,
+        "submission_link": submission.submission_link,
+        "submitted_at": submission.submitted_at,
+        "grade": submission.grade,
+    }
 
 
 if __name__ == "__main__":

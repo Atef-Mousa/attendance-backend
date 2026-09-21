@@ -2,7 +2,7 @@ import random
 import string
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from config import MAX_ATTENDANCE_DISTANCE_METERS
 import models
@@ -145,6 +145,104 @@ class AttendanceService:
             submission_link=submission_link,
         )
         db.add(submission)
+        await db.commit()
+        await db.refresh(submission)
+        return submission
+
+    @staticmethod
+    async def search_students(db: AsyncSession, query: str) -> list[models.User]:
+        result = await db.execute(
+            select(models.User).where(
+                models.User.role == models.Role.STUDENT,
+                models.User.full_name.ilike(f"%{query}%"),
+            )
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_student_performance(db: AsyncSession, student_id: int, instructor_id: int):
+        # 1. The target must be a real student
+        student_result = await db.execute(
+            select(models.User).where(
+                models.User.id == student_id,
+                models.User.role == models.Role.STUDENT,
+            )
+        )
+        student = student_result.scalar_one_or_none()
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+        # 2. Only the instructor's own courses count toward the analysis
+        courses_result = await db.execute(
+            select(models.Course).where(models.Course.instructor_id == instructor_id)
+        )
+        courses = courses_result.scalars().all()
+        course_ids = [course.id for course in courses]
+
+        sessions_by_course: dict[int, int] = {}
+        attended_by_course: dict[int, int] = {}
+        submissions = []
+
+        if course_ids:
+            sessions_result = await db.execute(
+                select(models.LectureSession.course_id, func.count(models.LectureSession.id))
+                .where(models.LectureSession.course_id.in_(course_ids))
+                .group_by(models.LectureSession.course_id)
+            )
+            sessions_by_course = dict(sessions_result.all())
+
+            attended_result = await db.execute(
+                select(models.LectureSession.course_id, func.count(models.AttendanceRecord.id))
+                .join(models.AttendanceRecord, models.AttendanceRecord.session_id == models.LectureSession.id)
+                .where(
+                    models.LectureSession.course_id.in_(course_ids),
+                    models.AttendanceRecord.student_id == student_id,
+                )
+                .group_by(models.LectureSession.course_id)
+            )
+            attended_by_course = dict(attended_result.all())
+
+            submissions_result = await db.execute(
+                select(models.TaskSubmission)
+                .join(models.LectureSession, models.LectureSession.id == models.TaskSubmission.session_id)
+                .where(
+                    models.TaskSubmission.student_id == student_id,
+                    models.LectureSession.course_id.in_(course_ids),
+                )
+            )
+            submissions = submissions_result.scalars().all()
+
+        courses_performance = [
+            {
+                "course_id": course.id,
+                "code": course.code,
+                "title": course.title,
+                "sessions_held": sessions_by_course.get(course.id, 0),
+                "attended_count": attended_by_course.get(course.id, 0),
+            }
+            for course in courses
+        ]
+
+        return student, courses_performance, submissions
+
+    @staticmethod
+    async def set_task_grade(
+        db: AsyncSession, submission_id: int, instructor_id: int, grade: float
+    ) -> models.TaskSubmission:
+        result = await db.execute(
+            select(models.TaskSubmission)
+            .join(models.LectureSession, models.LectureSession.id == models.TaskSubmission.session_id)
+            .join(models.Course, models.Course.id == models.LectureSession.course_id)
+            .where(
+                models.TaskSubmission.id == submission_id,
+                models.Course.instructor_id == instructor_id,
+            )
+        )
+        submission = result.scalar_one_or_none()
+        if submission is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task submission not found")
+
+        submission.grade = grade
         await db.commit()
         await db.refresh(submission)
         return submission

@@ -93,6 +93,32 @@ class TaskSubmissionResponse(BaseModel):
     student_name: str
     submission_link: str
     submitted_at: datetime
+    grade: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class GradeUpdate(BaseModel):
+    grade: float = Field(ge=0)
+
+# Student Performance Schemas
+class StudentSearchResult(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+
+    model_config = ConfigDict(from_attributes=True)
+
+class CoursePerformance(BaseModel):
+    course_id: int
+    code: str
+    title: str
+    sessions_held: int
+    attended_count: int
+
+class StudentPerformanceResponse(BaseModel):
+    student_id: int
+    full_name: str
+    email: EmailStr
+    courses: list[CoursePerformance]
+    task_submissions: list[TaskSubmissionResponse]
 
