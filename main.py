@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import models, schemas, auth
 from database import engine, get_db
-from services import AttendanceService
+from services import AttendanceService, generate_numeric_otp
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Non-blocking async table initialization on startup
@@ -227,6 +227,33 @@ async def stop_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     session.is_active = False
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+@app.post("/api/v1/sessions/{session_id}/extend", response_model=schemas.SessionResponse)
+async def extend_session(
+    session_id: int,
+    ttl_seconds: int = 60,
+    db: AsyncSession = Depends(get_db),
+    instructor: models.User = Depends(auth.require_role(models.Role.INSTRUCTOR)),
+):
+    result = await db.execute(
+        select(models.LectureSession)
+        .join(models.Course, models.Course.id == models.LectureSession.course_id)
+        .where(
+            models.LectureSession.id == session_id,
+            models.Course.instructor_id == instructor.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+    session.otp_code = generate_numeric_otp(6)
+    session.is_active = True
     await db.commit()
     await db.refresh(session)
     return session
