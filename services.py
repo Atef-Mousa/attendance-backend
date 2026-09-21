@@ -112,20 +112,7 @@ class AttendanceService:
                 detail="Task submissions are closed for this session"
             )
 
-        # 3. The student must have attended this session
-        attendance_result = await db.execute(
-            select(models.AttendanceRecord).where(
-                models.AttendanceRecord.session_id == session_id,
-                models.AttendanceRecord.student_id == student_id
-            )
-        )
-        if attendance_result.scalar_one_or_none() is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You must attend this session before submitting a task"
-            )
-
-        # 4. Check for Duplicate Submission
+        # 3. Check for Duplicate Submission
         dup_result = await db.execute(
             select(models.TaskSubmission).where(
                 models.TaskSubmission.session_id == session_id,
@@ -138,7 +125,7 @@ class AttendanceService:
                 detail="Task already submitted for this session"
             )
 
-        # 5. Record Submission
+        # 4. Record Submission
         submission = models.TaskSubmission(
             session_id=session_id,
             student_id=student_id,
