@@ -1,4 +1,6 @@
+import logging
 from contextlib import asynccontextmanager
+import jwt
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
@@ -8,6 +10,7 @@ from database import engine, get_db
 from services import AttendanceService, generate_numeric_otp
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
+from config import ENABLE_GLOBAL_LOGIN_LOCK
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Non-blocking async table initialization on startup
@@ -17,6 +20,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="OTP Student Attendance API (Async)", version="1.0.0", lifespan=lifespan)
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -71,8 +76,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    # Block student logins while any lecture session is active
-    if user.role == models.Role.STUDENT:
+    # Block student logins while any lecture session is active (config-gated, off by default)
+    if ENABLE_GLOBAL_LOGIN_LOCK and user.role == models.Role.STUDENT:
         now = datetime.now(timezone.utc)
         active_session_result = await db.execute(
             select(models.LectureSession).where(
@@ -145,12 +150,25 @@ async def start_session(
 async def submit_attendance(
     payload: schemas.AttendanceSubmit,
     db: AsyncSession = Depends(get_db),
-    student: models.User = Depends(auth.require_role(models.Role.STUDENT))
+    student: models.User = Depends(auth.require_role(models.Role.STUDENT)),
+    token: str = Depends(auth.oauth2_scheme),
 ):
+    token_iat = None
+    try:
+        token_payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        raw_iat = token_payload.get("iat")
+        if raw_iat is not None:
+            token_iat = datetime.fromtimestamp(raw_iat, tz=timezone.utc)
+        else:
+            logger.warning("Token for user id=%s has no 'iat' claim; skipping proxy-attendance check", student.id)
+    except jwt.PyJWTError:
+        logger.warning("Failed to decode token for 'iat' during attendance submission for user id=%s", student.id)
+
     record = await AttendanceService.submit_attendance(
-        db=db, 
-        student_id=student.id, 
-        otp_code=payload.otp_code
+        db=db,
+        student_id=student.id,
+        otp_code=payload.otp_code,
+        token_iat=token_iat,
     )
     return {
         "id": record.id,

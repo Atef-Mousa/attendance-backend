@@ -1,6 +1,7 @@
 import random
 import string
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +49,9 @@ class AttendanceService:
         return session
 
     @staticmethod
-    async def submit_attendance(db: AsyncSession, student_id: int, otp_code: str) -> models.AttendanceRecord:
+    async def submit_attendance(
+        db: AsyncSession, student_id: int, otp_code: str, token_iat: Optional[datetime] = None
+    ) -> models.AttendanceRecord:
         now = datetime.now(timezone.utc)
 
         # 1. Fetch active session matching OTP
@@ -69,7 +72,15 @@ class AttendanceService:
             await db.commit()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
 
-        # 3. Check for Duplicate Attendance Entry
+        # 3. Reject if the student logged in after this session already started
+        # (unknown iat from older tokens is allowed through, not rejected)
+        if token_iat is not None and token_iat > session.created_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You logged in after this session started; please contact your instructor if this is a mistake"
+            )
+
+        # 4. Check for Duplicate Attendance Entry
         dup_result = await db.execute(
             select(models.AttendanceRecord).where(
                 models.AttendanceRecord.session_id == session.id,
@@ -82,7 +93,7 @@ class AttendanceService:
                 detail="Attendance already recorded for this session"
             )
 
-        # 4. Record Attendance
+        # 5. Record Attendance
         record = models.AttendanceRecord(
             session_id=session.id,
             student_id=student_id,
