@@ -215,6 +215,9 @@ async def get_session_attendance(
 
 @app.get("/api/v1/settings/lock_status", response_model=schemas.LockStatusResponse)
 async def get_lock_status(db: AsyncSession = Depends(get_db)):
+    if not ENABLE_GLOBAL_LOGIN_LOCK:
+        return {"login_locked": False}
+
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(models.LectureSession).where(
