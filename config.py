@@ -6,7 +6,7 @@
 # Maximum allowed distance (in meters) between the instructor's
 # location when starting a session and a student's location when
 # submitting attendance. Submissions beyond this are rejected.
-MAX_ATTENDANCE_DISTANCE_METERS = 30
+MAX_ATTENDANCE_DISTANCE_METERS = 200
 
 # Global switch: when True, students cannot log in while ANY lecture
 # session is active anywhere in the system. Only safe to enable when
