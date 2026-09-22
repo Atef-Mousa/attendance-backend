@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 import models
+from config import ACCESS_TOKEN_EXPIRE_MINUTES
 from dotenv import load_dotenv
 import os 
 load_dotenv()
@@ -17,7 +18,7 @@ if SECRET_KEY is None:
     raise RuntimeError("SECRET_KEY environment variable is not set")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+# ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
 

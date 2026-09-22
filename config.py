@@ -12,3 +12,7 @@ MAX_ATTENDANCE_DISTANCE_METERS = 30
 # session is active anywhere in the system. Only safe to enable when
 # a single instructor is using the app at a time. Default: off.
 ENABLE_GLOBAL_LOGIN_LOCK = False
+
+
+# ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
