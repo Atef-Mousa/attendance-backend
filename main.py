@@ -168,6 +168,8 @@ async def submit_attendance(
         db=db,
         student_id=student.id,
         otp_code=payload.otp_code,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
         token_iat=token_iat,
     )
     return {

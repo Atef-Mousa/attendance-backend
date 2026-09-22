@@ -1,3 +1,4 @@
+import math
 import random
 import string
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,21 @@ import models
 
 def generate_numeric_otp(length: int = 6) -> str:
     return "".join(random.choices(string.digits, k=length))
+
+def calculate_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    # Haversine formula
+    earth_radius_meters = 6371000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return earth_radius_meters * c
 
 class AttendanceService:
 
@@ -50,7 +66,12 @@ class AttendanceService:
 
     @staticmethod
     async def submit_attendance(
-        db: AsyncSession, student_id: int, otp_code: str, token_iat: Optional[datetime] = None
+        db: AsyncSession,
+        student_id: int,
+        otp_code: str,
+        latitude: float,
+        longitude: float,
+        token_iat: Optional[datetime] = None,
     ) -> models.AttendanceRecord:
         now = datetime.now(timezone.utc)
 
@@ -72,7 +93,18 @@ class AttendanceService:
             await db.commit()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
 
-        # 3. Reject if the student logged in after this session already started
+        # 3. Check student is within range of the instructor's location
+        distance = calculate_distance_meters(session.latitude, session.longitude, latitude, longitude)
+        if distance > MAX_ATTENDANCE_DISTANCE_METERS:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"You are too far from the session location "
+                    f"({int(distance)}m away, must be within {MAX_ATTENDANCE_DISTANCE_METERS}m)"
+                )
+            )
+
+        # 4. Reject if the student logged in after this session already started
         # (unknown iat from older tokens is allowed through, not rejected)
         if token_iat is not None and token_iat > session.created_at:
             raise HTTPException(
@@ -80,7 +112,7 @@ class AttendanceService:
                 detail="You logged in after this session started; please contact your instructor if this is a mistake"
             )
 
-        # 4. Check for Duplicate Attendance Entry
+        # 5. Check for Duplicate Attendance Entry
         dup_result = await db.execute(
             select(models.AttendanceRecord).where(
                 models.AttendanceRecord.session_id == session.id,
@@ -93,7 +125,7 @@ class AttendanceService:
                 detail="Attendance already recorded for this session"
             )
 
-        # 5. Record Attendance
+        # 6. Record Attendance
         record = models.AttendanceRecord(
             session_id=session.id,
             student_id=student_id,
